@@ -111,7 +111,7 @@ Frac operator*(const Frac& a, const Frac& b){
 }
 
 Frac& Frac::operator/=(const Frac& fr){
-    a_ *= fr.b()*this->sign();
+    a_ *= fr.b()*fr.sign();
     b_ *= abs(fr.a());
     this->canoniz();
     return *this;
@@ -119,8 +119,8 @@ Frac& Frac::operator/=(const Frac& fr){
 
 Frac operator/(const Frac& a, const Frac& b){
     Frac f;
-    f.a(a.a()*b.sign());
-    f.b(b.b()*abs(a.a()));
+    f.a(a.a()*b.b()*b.sign());
+    f.b(a.b()*abs(b.a()));
     f.canoniz();
     return f;
 }
@@ -156,9 +156,9 @@ Frac operator-(const Frac& a, const Frac& b){
 
 
 int main(){
-    Frac fr(1, 5);
-    Frac fr2(2, 3);
+    Frac fr(2, 5);
+    Frac fr2(4, 3);
     // fr.a(1);
-    std::cout << (fr-fr2);
+    std::cout << (fr/fr2);
 
 }

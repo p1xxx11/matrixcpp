@@ -2,7 +2,8 @@
 #include <vector>
 #include <stdexcept>
 #include <iostream>
-
+#include <cmath>
+#include <type_traits>
 
 template <typename T>
 class Matrix {
@@ -42,6 +43,7 @@ public:
     Matrix& el_3(size_t i, size_t j, float l);
     Matrix& to_stup();
     Matrix& to_glstup();
+    int rank();
 };
 
 
@@ -301,116 +303,132 @@ Matrix<T>& Matrix<T>::el_3(size_t i, size_t j, float l){
 
 
 template <typename T>
-Matrix<T>& Matrix<T>::to_stup(){
+Matrix<T>& Matrix<T>::to_stup() {
+    static_assert(std::is_floating_point<T>::value,
+                  "Use Matrix<float> or Matrix<double>");
+    const T eps = T(1e-6);
+    size_t pivot_row = 0;
 
-
-    // НАХОДИМ НЕНУЛЕВОЙ СТОЛБЕЦ
-    size_t piv_i = 0; size_t piv_j = 0;
-    bool fl = true;
-    for (size_t j = 0; j < this->cols(); ++j){
-        for (size_t i = 0; i < this->rows(); ++i){
-            if ((*this)(i, j) != 0){
-                if (fl){
-                    fl = false;
-                    piv_i = i;
-                    piv_j = j;
-                }
-            }
-        }}
-        if (piv_i != 0) {
-            this->el_1(0, piv_i);
-        }
-
-        // ПРЯМОЙ ХОД
-        size_t start = 1;
-        while (piv_j < this->cols()){;
-        for (size_t i = start; i < this->rows(); ++i){
-            if ((*this)(i, piv_j) != 0){
-            float k = static_cast<float>((*this)(i, piv_j))/-(*this)(start-1, piv_j);
-            // std::cout << k;
-            // return *this;
-            this->el_3(i, start-1, k);
-            // std::cout << *this << k << " " << start << " " << piv_j << "\n";
-            // std::cout << *this;
-            // return *this;
+    for (size_t col = 0; col < cols_ && pivot_row < rows_; ++col) {
+        size_t best = pivot_row;
+        for (size_t row = pivot_row + 1; row < rows_; ++row) {
+            if (std::abs((*this)(row, col)) > std::abs((*this)(best, col))) {
+                best = row;
             }
         }
-        start++;
-        piv_j++;
+
+        // Нулевой столбец пропускаем, опорная строка остаётся прежней.
+        if (std::abs((*this)(best, col)) <= eps) {
+            continue;
+        }
+        if (best != pivot_row) {
+            this->el_1(pivot_row, best);
+        }
+
+        for (size_t row = pivot_row + 1; row < rows_; ++row) {
+            if (std::abs((*this)(row, col)) > eps) {
+                const float factor = static_cast<float>(
+                    -(*this)(row, col) / (*this)(pivot_row, col));
+                this->el_3(row, pivot_row, factor);
+            }
+        }
+        ++pivot_row;
     }
-
     return *this;
 }
 
+
 template <typename T>
-Matrix<T>& Matrix<T>::to_glstup(){
+Matrix<T>& Matrix<T>::to_glstup() {
     this->to_stup();
+    const T eps = T(1e-6);
 
-    // ОБРАТНЫЙ ХОД
-    
-    // делаем все единицами
-    for (size_t i = 0; i < this->rows(); ++i){
-        bool fl = true;
-        for (size_t j = 0; j < this->cols(); ++j){
-            if (((*this)(i, j) != 0) && fl){
-                // std::cout << (*this)(i, j) << "\n";
-                this->el_2(i, 1/static_cast<float>((*this)(i, j)));
-                fl = false;
-                // break;
+    // Обход снизу вверх безопасен и для пустой матрицы.
+    for (size_t row = rows_; row > 0;) {
+        --row;
+        size_t pivot_col = 0;
+        while (pivot_col < cols_ &&
+               std::abs((*this)(row, pivot_col)) <= eps) {
+            ++pivot_col;
+        }
+        if (pivot_col == cols_) {
+            continue;
+        }
+
+        this->el_2(row, static_cast<float>(T(1) / (*this)(row, pivot_col)));
+
+        // Работаем только со столбцом первого ненулевого элемента строки.
+        for (size_t upper = 0; upper < row; ++upper) {
+            if (std::abs((*this)(upper, pivot_col)) > eps) {
+                const float factor = static_cast<float>(
+                    -(*this)(upper, pivot_col) / (*this)(row, pivot_col));
+                this->el_3(upper, row, factor);
             }
         }
     }
-    // std::cout << *this;
-
-    // ОБРАТНЫЙ ХОД
-
-    for (size_t i = this->rows()-1; i > 0; --i){
-        for (size_t j = 0; j < this->cols(); ++j){
-            if ((*this)(i, j) != 0){
-                for (int k = i-1; k >= 0; --k){
-                    // std::cout << k << "\n";
-                    if ((*this)(k, j) != 0){
-                        float kf = -(*this)(k, j);
-                        this->el_3(k, i, kf);
-                    }   
-                }
-            }
-        }
-        // std::cout << *this;
-    }
-
-    // доп проверка на нулевые строки
-    std::vector<size_t> nen;
-    std::vector<size_t> nul;
-
-    for (size_t i = 0; i < this->rows(); ++i){
-        bool fl = true;
-        for (size_t j = 0; j < this->cols(); ++j){
-            if ((*this)(i, j) != 0){
-                fl = false;
-            }
-        }
-        if (fl) nul.push_back(i);
-        else nen.push_back(i);
-    }
-
     return *this;
 }
 
 
 template <typename T>
-class Matrix_kv : public Matrix<T> {
+int Matrix<T>::rank(){
+    std::cout << *this;
+    int rk = 0;
+    for (size_t i = 0; i < this->rows(); ++i){
+        bool fl = true;
+        for (size_t j = 0; j < this->cols(); ++j){
+            if ((*this)(i, j) != 0) fl = false;
+        }
+        if (!fl) rk++;
+    }
+    return rk;
+}
+
+template <typename T>
+class sq_Matrix : private Matrix<T> {
+
+
+    public:
+    explicit sq_Matrix(size_t rows, T initial_value = T())
+    : Matrix<T>(size, size, initial_value) {}
+
+    explicit sq_Matrix(const std::vector<std::vector<T>> &a)
+    : Matrix<T>()
+    // TODO: норм наследовать методы
+    using Matrix<T>::operator();
+    using Matrix<T>::rows;
+    using Matrix<T>::operator+=;
+    using Matrix<T>::operator-=;
+    using Matrix<T>::transp;
+    using Matrix<T>::input;
+    using Matrix<T>::expans;
+    using Matrix<T>::el1;
+    using Matrix<T>::el2;
+    using Matrix<T>::el3;
+    using Matrix<T>::to_stup;
+    using Matrix<T>::to_glstup;
+    using Matrix<T>::rank;
+
+    sq_Matrix inverse();
 
 };
+
+template <typename T>
+sq_Matrix<T> sq_Matrix<T>::inverse(){
+    (this->expans(cr_E(this->rows())))->to_glstup();
+    std::cout << *this;
+}
 
 
 
 int main(){
     Matrix <float> a({
-        {0, 5, 3, 2, 9},
-        {1, 0, 0, 0, 1},
-        {1, 0, 0, 0, 1},
-        {0, 1, 4, 2, 3}
+        {7, 5, -6, 11},
+        {0, 67, 99, 9},
+        {4, 0, 1, 0},
+        {1, 0, 0.5, 8},
+        {0, 0, 0, 25}
     });
-    std::cout << a << a.to_stup() << a.to_glstup();
+    // std::cout << a << a.to_stup() << a.to_glstup();
+    std::cout << a.rank() << "\n";
 }
